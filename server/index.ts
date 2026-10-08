@@ -44,7 +44,7 @@ async function callGemini<T>(prompt:string,schema:any,maxMs=25000):Promise<T>{
   for(const model of [FAST_MODEL,FALLBACK_MODEL]){
     try{
       const response=await Promise.race([
-        ai.models.generateContent({model,contents:prompt,config:{responseMimeType:'application/json',responseSchema:schema,thinkingConfig:{thinkingLevel:model===FAST_MODEL?'low':'minimal'}}}),
+        ai.models.generateContent({model,contents:prompt,config:{responseMimeType:'application/json',responseSchema:schema,}}),
         new Promise<never>((_,rej)=>setTimeout(()=>rej(new Error(`Gemini timeout after ${maxMs}ms`)),maxMs))
       ]);
       const raw=extractText(response); if(!raw)throw new Error('Gemini returned an empty response.');
