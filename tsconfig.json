@@ -6,9 +6,9 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "outDir": "../dist-server",
-    "rootDir": "./",
+    "outDir": "./dist-server",
+    "rootDir": "./server",
     "types": ["node"]
   },
-  "include": ["./**/*.ts"]
+  "include": ["server/**/*.ts"]
 }
