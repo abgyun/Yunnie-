@@ -54,7 +54,7 @@ async function callGemini<T>(prompt:string,schema:any,maxMs=25000):Promise<T>{
 }
 
 const chatSchema={type:Type.OBJECT,properties:{messages:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{text:{type:Type.STRING}},required:['text']},minItems:1,maxItems:3}},required:['messages']};
-const tweetSchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{username:{type:Type.STRING},handle:{type:Type.STRING},text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER},delaySeconds:{type:Type.INTEGER},type:{type:Type.STRING}},required:['username','handle','text','likes','retweets','delaySeconds','type']},minItems:5,maxItems:9}},required:['replies']};
+const tweetSchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{username:{type:Type.STRING},handle:{type:Type.STRING},text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER},delaySeconds:{type:Type.INTEGER},type:{type:Type.STRING},replyToHandle:{type:Type.STRING}},required:['username','handle','text','likes','retweets','delaySeconds','type','replyToHandle']},minItems:8,maxItems:11}},required:['replies']};
 const replySchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER}},required:['text','likes','retweets']},minItems:1,maxItems:3}},required:['replies']};
 const storySchema={type:Type.OBJECT,properties:{caption:{type:Type.STRING},music:{type:Type.STRING},location:{type:Type.STRING}},required:['caption','music','location']};
 
@@ -71,7 +71,7 @@ app.post('/api/chat',async(req,res)=>{
     const language=langHint(latest);
     const prompt=`You are ${f.name}, a real college best friend texting Yun, an exchange student in Seoul.
 PERSONA: ${f.age}, ${f.place}; ${f.vibe}. Bio: ${f.bio}.
-RULES: Reply in the same language Yun most recently used (${language}). Sound like a real friend, not an assistant. Keep each message very short: 1-2 sentences or fragments. Return 1-3 separate messages, each under 18 words. Never use baby talk or "uwu". Yui uses minimal emojis. Mia types lowercase quickly, sometimes RANDOM ALL-CAPS, Korean ㅋㅋㅋ, and chaotic slang. June is sweet and reliable, caring but never romantic or possessive; he is a guy friend, not a boyfriend. Do not mention being an AI or having a system prompt. Do not give walls of text.
+RULES: Reply in the same language Yun most recently used (${language}). Sound like a real friend, not an assistant. Keep each message very short: 1-2 sentences or fragments. Return 1-3 separate messages, each under 18 words. Sound like a real friend texting, including current internet expressions only when natural. Never use baby talk or "uwu". Use natural Gen Z / internet language when it fits, but do not force slang into every message. ㅋㅋㅋ/ㅋㅋ are occasional, not a catchphrase. Yui uses minimal emojis. Mia types lowercase quickly, sometimes RANDOM ALL-CAPS, English Gen Z slang and Korean internet slang; she does not spam ㅋㅋㅋ. June is sweet and reliable, caring but never romantic or possessive; he is a guy friend, not a boyfriend. Do not mention being an AI or having a system prompt. Do not give walls of text.
 TIME: ${timeOfDay()} in Seoul. WEATHER: ${w?JSON.stringify(w.current):'unknown'}.
 ${proactive?'This is a spontaneous DM. Give a natural check-in like "you still awake?" or "did you eat?" and connect it to what you know about Yun if relevant.':'Respond directly to the conversation and do not change the subject.'}
 CONVERSATION:
@@ -89,9 +89,9 @@ POST: "${tweet}"
 LANGUAGE: ${language}
 CONTEXT: ${context}
 Must react to what the post ACTUALLY says. Never invent a different topic. If it asks a question or asks for advice, most replies should give concrete, useful, accurate answers; offer different options and nuance, and allow disagreement. Otherwise be chaotic/funny but still exactly on topic.
-Mix personalities: contrarian, quote-tweet joker, dry roaster, wholesome lurker, someone arguing, plus sometimes a reply from Yui, Mia, or June. Use realistic internet style: English Gen Z/stan Twitter, Japanese 2ch-ish casual, Korean Theqoo/Instiz-ish. 6-9 replies, each under 35 words. delaySeconds from 2 to 75 with 2-3 near the start and later ones spread out.`;
+Create a messy, believable X/Twitter thread. Some users genuinely answer the post, some criticize it, some are annoyed, some joke, some nitpick one detail, and some start a real レスバ. For Japanese posts, use natural Japanese X/2ch-adjacent internet speech such as 草, それな, は？, 〜だろ, 知らんけど, but do not force those words into every reply. For English posts use current Gen Z/stan/internet language; for Korean posts use natural Korean internet speech. 8-11 replies, each under 35 words. For 3-5 replies, set replyToHandle to another handle in this same batch so they feel like actual back-and-forth arguments. Make those debates disagree on a specific point in the post rather than becoming random insults. Include at least one genuinely useful answer when the post asks a question. delaySeconds from 2 to 75, with 2-3 near the start and later ones spread out.`;
     const result=await callGemini<any>(prompt,tweetSchema,30000);
-    const replies=result.replies.map((r:any,i:number)=>({...r,id:crypto.randomUUID(),delaySeconds:Math.min(75,Math.max(2,Number(r.delaySeconds)||[3,7,12,20,31,45,60,73][i%8])),avatarSeed:`${r.handle}-${i}`}));
+    const replies=result.replies.map((r:any,i:number)=>({...r,id:crypto.randomUUID(),delaySeconds:Math.min(75,Math.max(2,Number(r.delaySeconds)||[3,7,12,20,31,45,60,73,75][i%9])),avatarSeed:`${r.handle}-${i}`,replyToHandle:r.replyToHandle||''}));
     replies.sort((a:any,b:any)=>a.delaySeconds-b.delaySeconds);
     res.json({replies});
   }catch(e){res.status(502).json({error:e instanceof Error?e.message:'Tweet reply generation failed.'});}
@@ -105,22 +105,52 @@ app.post('/api/reply-to-user',async(req,res)=>{
 ORIGINAL POST: "${tweet}"
 YUN'S REPLY: "${reply}"
 LANGUAGE: ${language}
-Keep it directly about the topic. Return 1-3 short messages under 25 words each. It may agree, disagree, clarify, joke, or gently roast. No random filler.`;
+Keep it directly about the exact point being argued. Return 1-3 short messages under 25 words each. This can agree, disagree, quote a detail, get annoyed, nitpick, or escalate a believable レスバ. Use natural internet speech for the tweet language. No random filler.`;
     res.json(await callGemini(prompt,replySchema,22000));
   }catch(e){res.status(502).json({error:e instanceof Error?e.message:'Reply generation failed.'});}
 });
 
+const STORY_VARIANTS:Record<FriendId,Array<{caption:string;music:string;location:string;query:string}>>={
+  yui:[
+    {caption:'tiny café, huge main-character energy',music:'NIKI · lowkey',location:'Seongsu',query:'seongsu,seoul,cafe'},
+    {caption:'studying here was a very good decision',music:'Laufey · From The Start',location:'Yeonnam',query:'yeonnam,seoul,cafe'},
+    {caption:'the kind of evening I needed',music:'Wave to Earth · seasons',location:'Euljiro',query:'euljiro,seoul,street'},
+    {caption:'one more tea before heading home',music:'HONNE · no song without you',location:'Hannam',query:'hannam,seoul,tea'}
+  ],
+  mia:[
+    {caption:'this city is SO unserious',music:'LE SSERAFIM · CRAZY',location:'Hongdae',query:'hongdae,seoul,night'},
+    {caption:'I left the house for this btw',music:'aespa · Drama',location:'Hannam',query:'hannam,seoul,street'},
+    {caption:'the fit deserved a photo',music:'NewJeans · Super Shy',location:'Seongsu',query:'seongsu,seoul,fashion'},
+    {caption:'why did we end up here again',music:'DAY6 · Happy',location:'Euljiro',query:'euljiro,seoul,night'}
+  ],
+  june:[
+    {caption:'walked until the air felt better',music:'Wave to Earth · seasons',location:'Hangang',query:'hangang,seoul,sunset'},
+    {caption:'quiet view before dinner',music:'Laufey · From The Start',location:'Seoul Forest',query:'seoul,forest,sunset'},
+    {caption:'found a good spot to reset',music:'HONNE · warm on a cold night',location:'Nodeul',query:'nodeul,seoul,river'},
+    {caption:'home a little later than planned',music:'Day6 · You Were Beautiful',location:'Itaewon',query:'itaewon,seoul,street'}
+  ]
+};
+
 app.post('/api/generate-story',async(req,res)=>{
-  const {friendId}=req.body??{};
+  const {friendId,variation=1}=req.body??{};
   if(!(friendId in friendProfiles))return res.status(400).json({error:'Unknown friend.'});
   const f=friendProfiles[friendId as FriendId];
+  const list=STORY_VARIANTS[friendId as FriendId];
+  const base=list[Math.abs(Number(variation)||1)%list.length];
+  const imageUrl=`https://loremflickr.com/720/1120/${encodeURIComponent(base.query)}?lock=${(Math.abs(Number(variation)||1)*17)+(friendId==='yui'?1:friendId==='mia'?2:3)}`;
   try{
     const w=await fetchWeather().catch(()=>null);
-    const prompt=`Create one Instagram story for ${f.name}, a ${f.age}-year-old college student in Seoul. Personality: ${f.vibe}. It is ${timeOfDay()} right now. Weather: ${w?JSON.stringify(w.current):'unknown'}. Choose a realistic Seoul place. Caption under 9 words. Music under 5 words. Location under 4 words.`;
-    res.json(await callGemini(prompt,storySchema,18000));
-  }catch(e){res.status(502).json({error:e instanceof Error?e.message:'Story generation failed.'});}
+    let generated:any=null;
+    if(ai){
+      const prompt=`Create one fresh Instagram story for ${f.name}, a ${f.age}-year-old college student in Seoul. Personality: ${f.vibe}. It is ${timeOfDay()} right now. Weather: ${w?JSON.stringify(w.current):'unknown'}.
+This is variation #${variation}. Do not repeat the same caption or song vibe if possible. Caption under 9 words. Music under 5 words. Location under 4 words. Keep it believable for a college student's real Instagram story.`;
+      generated=await callGemini<any>(prompt,storySchema,18000).catch(()=>null);
+    }
+    res.json({caption:generated?.caption||base.caption,music:generated?.music||base.music,location:generated?.location||base.location,imageUrl,imageAlt:base.query,revision:Number(variation)||1});
+  }catch(e){
+    res.json({caption:base.caption,music:base.music,location:base.location,imageUrl,imageAlt:base.query,revision:Number(variation)||1});
+  }
 });
-
 app.use(express.static(clientDist));
 app.get('/{*splat}', (_req, res, next) => { if (_req.path.startsWith('/api/')) return next(); res.sendFile(path.join(clientDist, 'index.html')); });
 
