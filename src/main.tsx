@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import {
   ArrowUp, AudioLines, Bookmark, Camera, CheckCheck, ChevronLeft, Heart, Image as ImageIcon, Info, Instagram,
@@ -253,3 +254,7 @@ export default function App(){
     {toast&&<div className="toast"><CheckCheck size={16}/>{toast}</div>}
   </div>
 }
+
+const root = document.getElementById('root');
+if (!root) throw new Error('Root element #root was not found.');
+createRoot(root).render(<App />);
