@@ -208,7 +208,7 @@ export default function App(){
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||'Story generation failed');
       const local=FRONTEND_STORY_VARIANTS[id][next%FRONTEND_STORY_VARIANTS[id].length];
-      setStoryData(s=>({...s,[id]:{...s[id],...local,...d,imageUrl:local.imageUrl,imageAlt:local.imageAlt,comments:d.comments?.length?d.comments:local.comments,revision:next}}));
+      setStoryData(s=>({...s,[id]:{...s[id],...local,...d,imageUrl:d.imageUrl||local.imageUrl,imageAlt:d.imageAlt||local.imageAlt,comments:d.comments?.length?d.comments:local.comments,revision:next}}));
     }catch(e){
       showToast(e instanceof Error?e.message:'Story refresh failed');
     }
