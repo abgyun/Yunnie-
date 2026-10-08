@@ -54,7 +54,7 @@ async function callGemini<T>(prompt:string,schema:any,maxMs=25000):Promise<T>{
 }
 
 const chatSchema={type:Type.OBJECT,properties:{messages:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{text:{type:Type.STRING}},required:['text']},minItems:1,maxItems:3}},required:['messages']};
-const tweetSchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{username:{type:Type.STRING},handle:{type:Type.STRING},text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER},delaySeconds:{type:Type.INTEGER},type:{type:Type.STRING},replyToHandle:{type:Type.STRING}},required:['username','handle','text','likes','retweets','delaySeconds','type','replyToHandle']},minItems:32,maxItems:32}},required:['replies']};
+const tweetBatchSchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{username:{type:Type.STRING},handle:{type:Type.STRING},text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER},type:{type:Type.STRING},replyToHandle:{type:Type.STRING}},required:['username','handle','text','likes','retweets','type','replyToHandle']},minItems:8,maxItems:8}},required:['replies']};
 const replySchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER}},required:['text','likes','retweets']},minItems:1,maxItems:3}},required:['replies']};
 const storySchema={type:Type.OBJECT,properties:{caption:{type:Type.STRING},music:{type:Type.STRING},location:{type:Type.STRING},comments:{type:Type.ARRAY,items:{type:Type.STRING},minItems:2,maxItems:4}},required:['caption','music','location','comments']};
 
@@ -84,19 +84,16 @@ app.post('/api/tweet-replies',async(req,res)=>{
   const {tweet='',language='English',context=''}=req.body??{};
   if(!tweet.trim())return res.status(400).json({error:'Tweet is empty.'});
   try{
-    const prompt=`Generate believable internet replies to this exact post by Yun, an exchange student in Seoul.
-POST: "${tweet}"
-LANGUAGE: ${language}
-CONTEXT: ${context}
-Must react to what the post ACTUALLY says. Never invent a different topic. If it asks a question or asks for advice, most replies should give concrete, useful, accurate answers; offer different options and nuance, and allow disagreement. Otherwise be chaotic/funny but still exactly on topic.
-Create a messy, believable X/Twitter thread. Some users genuinely answer the post, some criticize it, some are annoyed, some joke, some nitpick one detail, and some start a real レスバ. For Japanese posts, use natural Japanese X/2ch-adjacent internet speech such as 草, それな, は？, 〜だろ, 知らんけど, but do not force those words into every reply. For English posts use current Gen Z/stan/internet language; for Korean posts use natural Korean internet speech. exactly 32 replies, each under 35 words. For 12-18 replies, set replyToHandle to another handle in this same batch so they feel like actual back-and-forth arguments. Make those debates disagree on a specific point in the post rather than becoming random insults. Include at least one genuinely useful answer when the post asks a question. delaySeconds from 2 to 75, with 2-3 near the start and later ones spread out.`;
-    const result=await callGemini<any>(prompt,tweetSchema,30000);
-    const replies=result.replies.slice(0,32).map((r:any,i:number)=>({...r,id:crypto.randomUUID(),delaySeconds:0,avatarSeed:`${r.handle}-${i}`,replyToHandle:r.replyToHandle||''}));
-    replies.sort((a:any,b:any)=>a.delaySeconds-b.delaySeconds);
+    const basePrompt='Generate believable internet replies to this exact X/Twitter post by Yun, an exchange student in Seoul.\nPOST: "'+tweet+'"\nLANGUAGE: '+language+'\nCONTEXT: '+context+'\nReact to the exact post. Never invent a different topic. Mix genuine answers, disagreement, criticism, annoyed reactions, jokes, nitpicks, quote-tweet energy, and real back-and-forth arguments. For Japanese posts use natural X/2ch-adjacent Japanese; for English use current internet/Gen-Z language; for Korean use natural Korean internet speech. This batch must contain exactly 8 different users. 2-4 of them should be part of a believable argument or レスバ. Reply-to handles must reference users from this same batch. Keep every reply under 35 words. Do not make every reply supportive.';
+    const batches=await Promise.all(Array.from({length:4},(_,i)=>callGemini<any>(basePrompt+'\nBATCH '+(i+1)+'/4: create 8 unique users with a different mix of reactions.',tweetBatchSchema,30000)));
+    const replies=batches.flatMap((b:any)=>Array.isArray(b.replies)?b.replies:[]).slice(0,32).map((r:any,i:number)=>({...r,id:crypto.randomUUID(),delaySeconds:0,avatarSeed:(r.handle||'user')+'-'+i,replyToHandle:r.replyToHandle||''}));
+    if(replies.length<30)throw new Error('Only generated '+replies.length+' replies.');
     res.json({replies});
-  }catch(e){res.status(502).json({error:e instanceof Error?e.message:'Tweet reply generation failed.'});}
+  }catch(e){
+    console.error('Tweet reply generation failed:',e);
+    res.status(502).json({error:e instanceof Error?e.message:'Tweet reply generation failed.'});
+  }
 });
-
 app.post('/api/reply-to-user',async(req,res)=>{
   const {tweet,reply,language='English',displayName='them'}=req.body??{};
   if(!tweet?.trim()||!reply?.trim())return res.status(400).json({error:'Tweet and reply are required.'});
@@ -110,6 +107,22 @@ Keep it directly about the exact point being argued. Return 1-3 short messages u
   }catch(e){res.status(502).json({error:e instanceof Error?e.message:'Reply generation failed.'});}
 });
 
+async function generateStoryImage(prompt:string){
+  if(!ai)return null;
+  try{
+    const response=await Promise.race([
+      ai.models.generateContent({model:'gemini-3.1-flash-lite-image',contents:prompt,config:{responseModalities:['IMAGE']}}),
+      new Promise<never>((_,rej)=>setTimeout(()=>rej(new Error('Story image generation timed out')),35000))
+    ]);
+    const parts=response?.candidates?.[0]?.content?.parts||[];
+    const img=parts.find((p:any)=>p?.inlineData?.data);
+    if(!img?.inlineData?.data)return null;
+    return 'data:'+(img.inlineData.mimeType||'image/png')+';base64,'+img.inlineData.data;
+  }catch(e){
+    console.error('Story image generation failed:',e instanceof Error?e.message:e);
+    return null;
+  }
+}
 const STORY_VARIANTS:Record<FriendId,Array<{caption:string;music:string;location:string;query:string}>>={
   yui:[
     {caption:'tiny café, huge main-character energy',music:'NIKI · lowkey',location:'Seongsu',query:'seongsu,seoul,cafe'},
@@ -137,20 +150,20 @@ app.post('/api/generate-story',async(req,res)=>{
   const f=friendProfiles[friendId as FriendId];
   const list=STORY_VARIANTS[friendId as FriendId];
   const base=list[Math.abs(Number(variation)||1)%list.length];
-  const imageUrl=`https://loremflickr.com/720/1120/${encodeURIComponent(base.query)}?lock=${(Math.abs(Number(variation)||1)*17)+(friendId==='yui'?1:friendId==='mia'?2:3)}`;
+  const fallbackComments=f.id==='yui'?['this feels so you','saving this vibe']:f.id==='mia'?['girl where are you','the fit ate']:['that view is insane','get home safe'];
   try{
     const w=await fetchWeather().catch(()=>null);
-    let generated:any=null;
-    if(ai){
-      const prompt=`Create one fresh Instagram story for ${f.name}, a ${f.age}-year-old college student in Seoul. Personality: ${f.vibe}. It is ${timeOfDay()} right now. Weather: ${w?JSON.stringify(w.current):'unknown'}.
-This is variation #${variation}. Do not repeat the same caption or song vibe if possible. Caption under 9 words. Music under 5 words. Location under 4 words. Give 2-4 short story replies/comments that naturally react to the exact photo/story situation. Keep it believable for a college student's real Instagram story.`;
-      generated=await callGemini<any>(prompt,storySchema,18000).catch(()=>null);
-    }
-    const fallbackComments=friendId==='yui'?['this feels so you','saving this vibe']:friendId==='mia'?['girl where are you','the fit ate']:['that view is insane','get home safe']; res.json({caption:generated?.caption||base.caption,music:generated?.music||base.music,location:generated?.location||base.location,comments:Array.isArray(generated?.comments)&&generated.comments.length?generated.comments:fallbackComments,imageUrl,imageAlt:base.query,revision:Number(variation)||1});
+    const context=w?.current?('Current Seoul weather: '+w.current.temperature_2m+'°C, code '+w.current.weather_code+'.'):'Current Seoul weather unavailable.';
+    const metaPrompt='Create one fresh Instagram Story for '+f.name+', age '+f.age+', a college student in Seoul. Personality: '+f.vibe+'. Time: '+timeOfDay()+'. '+context+' Variation #'+variation+'. Return concise JSON with caption, music, location, and 2-4 short realistic Story replies/comments. Make all details match the photo scene.';
+    const generated=ai?await callGemini<any>(metaPrompt,storySchema,20000).catch(e=>{console.error('Story metadata failed:',e);return null;}):null;
+    const imagePrompt='Generate a photorealistic vertical 9:16 Instagram Story photo, like an authentic smartphone photo taken by a 21-22 year old college student in Seoul. NOT illustration, NOT anime, NOT 3D render, NOT digital art. Natural imperfect smartphone photography, realistic lighting, realistic materials, subtle camera grain, believable Seoul location. Personality: '+f.vibe+'. Scene: '+base.query+'. Caption mood: '+(generated?.caption||base.caption)+'. Location: '+(generated?.location||base.location)+'. Time: '+timeOfDay()+'. '+context+' Do not put text, captions, logos, watermarks, or UI elements in the image.';
+    const imageUrl=await generateStoryImage(imagePrompt);
+    res.json({caption:generated?.caption||base.caption,music:generated?.music||base.music,location:generated?.location||base.location,comments:Array.isArray(generated?.comments)&&generated.comments.length?generated.comments:fallbackComments,imageUrl,imageAlt:'AI-generated photorealistic Instagram Story photo',revision:Number(variation)||1});
   }catch(e){
-    const fallbackComments=friendId==='yui'?['this feels so you','saving this vibe']:friendId==='mia'?['girl where are you','the fit ate']:['that view is insane','get home safe']; res.json({caption:base.caption,music:base.music,location:base.location,comments:fallbackComments,imageUrl,imageAlt:base.query,revision:Number(variation)||1});
+    console.error('Story generation failed:',e);
+    res.json({caption:base.caption,music:base.music,location:base.location,comments:fallbackComments,imageUrl:null,imageAlt:'',revision:Number(variation)||1});
   }
-});
+}
 app.use(express.static(clientDist));
 app.get('/{*splat}', (_req, res, next) => { if (_req.path.startsWith('/api/')) return next(); res.sendFile(path.join(clientDist, 'index.html')); });
 
