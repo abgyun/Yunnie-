@@ -31,9 +31,32 @@ const seedChats:Record<FriendId,Message[]> = {
 const STORY_BY_TIME = (name:string) => {
   const hour=new Date().getHours();
   if(hour<11)return name==='Mia'?['iced americano + bad decisions','NewJeans · Super Shy','Yeonnam']:[name==='Yui'?'morning pages + matcha':'slow morning walk',name==='Yui'?'IU · strawberry moon':'Laufey · From The Start','Seoul Forest'];
-  if(hour<17)return name==='Mia'?['lunch break became a 3pm break ㅋㅋㅋ','aespa · Drama','Hannam']:[name==='Yui'?'tiny table, big afternoon':'between errands','NIKI · lowkey','Seongsu'];
+  if(hour<17)return name==='Mia'?['lunch break became a 3pm break','aespa · Drama','Hannam']:[name==='Yui'?'tiny table, big afternoon':'between errands','NIKI · lowkey','Seongsu'];
   if(hour<22)return name==='Mia'?['the city is LOUD tonight','LE SSERAFIM · CRAZY','Hongdae']:[name==='Yui'?'sunset + one more page':'sunset before dinner','Wave to Earth · seasons','Hangang'];
   return name==='Mia'?['WHY ARE WE STILL AWAKE','DAY6 · Happy','Euljiro']:[name==='Yui'?'late tea, no rush':'home safe','HONNE · no song without you','Yeonnam'];
+};
+
+const FRONTEND_STORY_VARIANTS:Record<FriendId,Story[]> = {
+  yui:[
+    {caption:'tiny café, huge main-character energy',music:'NIKI · lowkey',location:'Seongsu',theme:'from-rose-100 via-white to-violet-100',imageUrl:'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=720&q=85',imageAlt:'coffee shop'},
+    {caption:'studying here was a very good decision',music:'Laufey · From The Start',location:'Yeonnam',theme:'from-rose-100 via-white to-violet-100',imageUrl:'https://images.unsplash.com/photo-1445116572660-236099ec97a0?auto=format&fit=crop&w=720&q=85',imageAlt:'cozy cafe table'},
+    {caption:'the kind of evening I needed',music:'Wave to Earth · seasons',location:'Euljiro',theme:'from-rose-100 via-white to-violet-100',imageUrl:'https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=720&q=85',imageAlt:'city evening'},
+    {caption:'one more tea before heading home',music:'HONNE · no song without you',location:'Hannam',theme:'from-rose-100 via-white to-violet-100',imageUrl:'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=720&q=85',imageAlt:'tea and cafe'}
+  ],
+  mia:[
+    {caption:'this city is SO unserious',music:'LE SSERAFIM · CRAZY',location:'Hongdae',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:'https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=720&q=85',imageAlt:'Seoul-style city street'},
+    {caption:'I left the house for this btw',music:'aespa · Drama',location:'Hannam',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=720&q=85',imageAlt:'fashion outfit'},
+    {caption:'the fit deserved a photo',music:'NewJeans · Super Shy',location:'Seongsu',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=720&q=85',imageAlt:'street fashion'},
+    {caption:'why did we end up here again',music:'DAY6 · Happy',location:'Euljiro',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:'https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=720&q=85',imageAlt:'night city'}
+  ],
+  june:[
+    {caption:'walked until the air felt better',music:'Wave to Earth · seasons',location:'Hangang',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=720&q=85',imageAlt:'sunset walk'},
+    {caption:'quiet view before dinner',music:'Laufey · From The Start',location:'Seoul Forest',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:'https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=720&q=85',imageAlt:'quiet park'},
+    {caption:'found a good spot to reset',music:'HONNE · warm on a cold night',location:'Nodeul',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=720&q=85',imageAlt:'river view'},
+    {caption:'home a little later than planned',music:'DAY6 · You Were Beautiful',location:'Itaewon',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:'https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=720&q=85',imageAlt:'city lights'}
+  ]
+};
+
 };
 
 const initialTweets:Tweet[] = [
@@ -168,14 +191,17 @@ export default function App(){
       const r=await fetch('/api/generate-story',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({friendId:id,variation:next})});
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||'Story generation failed');
-      setStoryData(s=>({...s,[id]:{...s[id],...d}}));
+      const local=FRONTEND_STORY_VARIANTS[id][next%FRONTEND_STORY_VARIANTS[id].length];
+      setStoryData(s=>({...s,[id]:{...s[id],...local,...d,imageUrl:local.imageUrl,imageAlt:local.imageAlt,revision:next}}));
     }catch(e){
       showToast(e instanceof Error?e.message:'Story refresh failed');
     }
   }
   async function openStory(id:FriendId){
     const next=(storyCycle[id]||0)+1;
+    const variant=FRONTEND_STORY_VARIANTS[id][next%FRONTEND_STORY_VARIANTS[id].length];
     setStoryCycle(c=>({...c,[id]:next}));
+    setStoryData(s=>({...s,[id]:{...s[id],...variant,revision:next}}));
     setStory(id);
     void generateStory(id,next);
   }
@@ -264,7 +290,7 @@ export default function App(){
 
     {profile&&<div className="modal-backdrop" onClick={()=>setProfile(null)}><div className="profile-modal" onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setProfile(null)}><X size={18}/></button><div className="profile-cover"><div className="profile-large"><img src={FRIENDS[profile].avatar}/></div></div><div className="profile-content"><h2>{FRIENDS[profile].name}, {FRIENDS[profile].age}</h2><span className="handle">{FRIENDS[profile].handle}</span><p>{FRIENDS[profile].bio}</p><div className="tag-row">{FRIENDS[profile].vibe.split(' · ').map(t=><span key={t}>{t}</span>)}</div><div className="profile-status"><span className="online-dot static"/> {FRIENDS[profile].status}</div><button className="primary-btn" onClick={()=>{setActiveFriend(profile);setProfile(null);setTab('dms')}}>Message</button></div></div></div>}
 
-    {story&&currentStory&&<div className="modal-backdrop story-backdrop" onClick={()=>setStory(null)}><div className={`story-modal bg-gradient-to-br ${currentStory.theme}`} onClick={e=>e.stopPropagation()}><div className="story-top"><div className="story-author"><img src={FRIENDS[story].avatar}/><div><b>{FRIENDS[story].name}</b><span>now · Seoul</span></div></div><button onClick={()=>setStory(null)}><X size={19}/></button></div><div className="story-center"><div className="fake-photo">{currentStory.imageUrl&&<img className="story-photo" src={currentStory.imageUrl} alt={currentStory.imageAlt||'Story photo'} onError={e=>{e.currentTarget.style.display='none';}}/>}<div className="story-photo-overlay"><Sparkles size={30}/><span>{STORY_BY_TIME(FRIENDS[story].name)[0]}</span></div></div></div><div className="story-bottom"><b>{currentStory.caption}</b><span><Music2 size={14}/> {currentStory.music}</span><span><MapPin size={14}/> {currentStory.location}</span><button onClick={()=>{const next=(storyCycle[story]||0)+1;setStoryCycle(c=>({...c,[story]:next}));void generateStory(story,next)}}><Sparkles size={14}/> New story</button></div></div></div>}
+    {story&&currentStory&&<div className="modal-backdrop story-backdrop" onClick={()=>setStory(null)}><div className={`story-modal bg-gradient-to-br ${currentStory.theme}`} onClick={e=>e.stopPropagation()}><div className="story-top"><div className="story-author"><img src={FRIENDS[story].avatar}/><div><b>{FRIENDS[story].name}</b><span>now · Seoul</span></div></div><button onClick={()=>setStory(null)}><X size={19}/></button></div><div className="story-center"><div className="fake-photo">{currentStory.imageUrl&&<img className="story-photo" src={currentStory.imageUrl} alt={currentStory.imageAlt||'Story photo'} onError={e=>{const img=e.currentTarget; img.src=FRONTEND_STORY_VARIANTS[story!][((currentStory.revision||0)+1)%FRONTEND_STORY_VARIANTS[story!].length].imageUrl!;}}/>}<div className="story-photo-overlay"><Sparkles size={30}/><span>{STORY_BY_TIME(FRIENDS[story].name)[0]}</span></div></div></div><div className="story-bottom"><b>{currentStory.caption}</b><span><Music2 size={14}/> {currentStory.music}</span><span><MapPin size={14}/> {currentStory.location}</span><button onClick={()=>{const next=(storyCycle[story]||0)+1;setStoryCycle(c=>({...c,[story]:next}));void generateStory(story,next)}}><Sparkles size={14}/> New story</button></div></div></div>}
 
     {call&&<div className="call-overlay"><div className="call-card"><img className="call-avatar" src={FRIENDS[call.friend].avatar}/><div className="call-name">{FRIENDS[call.friend].name}</div><div className="call-status">{call.state==='ringing'?`calling ${call.kind}…`:formatTime(call.startedAt||Date.now())}</div>{call.state==='ringing'?<div className="call-pulse"><span/><span/><span/></div>:<div className="call-timer"><Clock3 size={17}/> {Math.max(0,Math.floor((Date.now()-(call.startedAt||Date.now()))/1000))}s</div>}<div className="call-controls"><button onClick={()=>setCall(null)} className="hangup"><Phone size={20}/></button><button onClick={()=>makeCall(call.kind==='audio'?'video':'audio')}>{call.kind==='audio'?<Video size={20}/>:<AudioLines size={20}/>}</button></div></div></div>}
 
