@@ -111,7 +111,7 @@ async function generateStoryImage(prompt:string){
   if(!ai)return null;
   try{
     const response=await Promise.race([
-      ai.models.generateContent({model:'gemini-3.1-flash-lite-image',contents:prompt,config:{responseModalities:['IMAGE']}}),
+      ai.models.generateContent({model:'gemini-nano-banana-2.1',contents:prompt,config:{responseModalities:['IMAGE']}}),
       new Promise<never>((_,rej)=>setTimeout(()=>rej(new Error('Story image generation timed out')),35000))
     ]);
     const parts=response?.candidates?.[0]?.content?.parts||[];
@@ -163,7 +163,7 @@ app.post('/api/generate-story',async(req,res)=>{
     console.error('Story generation failed:',e);
     res.json({caption:base.caption,music:base.music,location:base.location,comments:fallbackComments,imageUrl:null,imageAlt:'',revision:Number(variation)||1});
   }
-}
+});
 app.use(express.static(clientDist));
 app.get('/{*splat}', (_req, res, next) => { if (_req.path.startsWith('/api/')) return next(); res.sendFile(path.join(clientDist, 'index.html')); });
 
