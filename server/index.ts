@@ -54,9 +54,9 @@ async function callGemini<T>(prompt:string,schema:any,maxMs=25000):Promise<T>{
 }
 
 const chatSchema={type:Type.OBJECT,properties:{messages:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{text:{type:Type.STRING}},required:['text']},minItems:1,maxItems:3}},required:['messages']};
-const tweetSchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{username:{type:Type.STRING},handle:{type:Type.STRING},text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER},delaySeconds:{type:Type.INTEGER},type:{type:Type.STRING},replyToHandle:{type:Type.STRING}},required:['username','handle','text','likes','retweets','delaySeconds','type','replyToHandle']},minItems:30,maxItems:36}},required:['replies']};
+const tweetSchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{username:{type:Type.STRING},handle:{type:Type.STRING},text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER},delaySeconds:{type:Type.INTEGER},type:{type:Type.STRING},replyToHandle:{type:Type.STRING}},required:['username','handle','text','likes','retweets','delaySeconds','type','replyToHandle']},minItems:32,maxItems:32}},required:['replies']};
 const replySchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER}},required:['text','likes','retweets']},minItems:1,maxItems:3}},required:['replies']};
-const storySchema={type:Type.OBJECT,properties:{caption:{type:Type.STRING},music:{type:Type.STRING},location:{type:Type.STRING}},required:['caption','music','location']};
+const storySchema={type:Type.OBJECT,properties:{caption:{type:Type.STRING},music:{type:Type.STRING},location:{type:Type.STRING},comments:{type:Type.ARRAY,items:{type:Type.STRING},minItems:2,maxItems:4}},required:['caption','music','location','comments']};
 
 app.get('/api/health',(_req,res)=>res.json({ok:true,geminiConfigured:Boolean(ai),time:new Date().toISOString()}));
 app.get('/api/weather',async(_req,res)=>{try{const d=await fetchWeather();res.json({city:'Seoul',current:d.current,timeOfDay:timeOfDay()});}catch{res.status(503).json({error:'Weather unavailable'});}});
@@ -89,9 +89,9 @@ POST: "${tweet}"
 LANGUAGE: ${language}
 CONTEXT: ${context}
 Must react to what the post ACTUALLY says. Never invent a different topic. If it asks a question or asks for advice, most replies should give concrete, useful, accurate answers; offer different options and nuance, and allow disagreement. Otherwise be chaotic/funny but still exactly on topic.
-Create a messy, believable X/Twitter thread. Some users genuinely answer the post, some criticize it, some are annoyed, some joke, some nitpick one detail, and some start a real レスバ. For Japanese posts, use natural Japanese X/2ch-adjacent internet speech such as 草, それな, は？, 〜だろ, 知らんけど, but do not force those words into every reply. For English posts use current Gen Z/stan/internet language; for Korean posts use natural Korean internet speech. 30-36 replies, each under 35 words. For 12-18 replies, set replyToHandle to another handle in this same batch so they feel like actual back-and-forth arguments. Make those debates disagree on a specific point in the post rather than becoming random insults. Include at least one genuinely useful answer when the post asks a question. delaySeconds from 2 to 75, with 2-3 near the start and later ones spread out.`;
+Create a messy, believable X/Twitter thread. Some users genuinely answer the post, some criticize it, some are annoyed, some joke, some nitpick one detail, and some start a real レスバ. For Japanese posts, use natural Japanese X/2ch-adjacent internet speech such as 草, それな, は？, 〜だろ, 知らんけど, but do not force those words into every reply. For English posts use current Gen Z/stan/internet language; for Korean posts use natural Korean internet speech. exactly 32 replies, each under 35 words. For 12-18 replies, set replyToHandle to another handle in this same batch so they feel like actual back-and-forth arguments. Make those debates disagree on a specific point in the post rather than becoming random insults. Include at least one genuinely useful answer when the post asks a question. delaySeconds from 2 to 75, with 2-3 near the start and later ones spread out.`;
     const result=await callGemini<any>(prompt,tweetSchema,30000);
-    const replies=result.replies.slice(0,36).map((r:any,i:number)=>({...r,id:crypto.randomUUID(),delaySeconds:Math.min(75,Math.max(2,Number(r.delaySeconds)||Math.min(75,2+i*2)),avatarSeed:`${r.handle}-${i}`,replyToHandle:r.replyToHandle||''}));
+    const replies=result.replies.slice(0,32).map((r:any,i:number)=>({...r,id:crypto.randomUUID(),delaySeconds:0,avatarSeed:`${r.handle}-${i}`,replyToHandle:r.replyToHandle||''}));
     replies.sort((a:any,b:any)=>a.delaySeconds-b.delaySeconds);
     res.json({replies});
   }catch(e){res.status(502).json({error:e instanceof Error?e.message:'Tweet reply generation failed.'});}
@@ -143,12 +143,12 @@ app.post('/api/generate-story',async(req,res)=>{
     let generated:any=null;
     if(ai){
       const prompt=`Create one fresh Instagram story for ${f.name}, a ${f.age}-year-old college student in Seoul. Personality: ${f.vibe}. It is ${timeOfDay()} right now. Weather: ${w?JSON.stringify(w.current):'unknown'}.
-This is variation #${variation}. Do not repeat the same caption or song vibe if possible. Caption under 9 words. Music under 5 words. Location under 4 words. Keep it believable for a college student's real Instagram story.`;
+This is variation #${variation}. Do not repeat the same caption or song vibe if possible. Caption under 9 words. Music under 5 words. Location under 4 words. Give 2-4 short story replies/comments that naturally react to the exact photo/story situation. Keep it believable for a college student's real Instagram story.`;
       generated=await callGemini<any>(prompt,storySchema,18000).catch(()=>null);
     }
-    res.json({caption:generated?.caption||base.caption,music:generated?.music||base.music,location:generated?.location||base.location,imageUrl,imageAlt:base.query,revision:Number(variation)||1});
+    const fallbackComments=friendId==='yui'?['this feels so you','saving this vibe']:friendId==='mia'?['girl where are you','the fit ate']:['that view is insane','get home safe']; res.json({caption:generated?.caption||base.caption,music:generated?.music||base.music,location:generated?.location||base.location,comments:Array.isArray(generated?.comments)&&generated.comments.length?generated.comments:fallbackComments,imageUrl,imageAlt:base.query,revision:Number(variation)||1});
   }catch(e){
-    res.json({caption:base.caption,music:base.music,location:base.location,imageUrl,imageAlt:base.query,revision:Number(variation)||1});
+    const fallbackComments=friendId==='yui'?['this feels so you','saving this vibe']:friendId==='mia'?['girl where are you','the fit ate']:['that view is insane','get home safe']; res.json({caption:base.caption,music:base.music,location:base.location,comments:fallbackComments,imageUrl,imageAlt:base.query,revision:Number(variation)||1});
   }
 });
 app.use(express.static(clientDist));
