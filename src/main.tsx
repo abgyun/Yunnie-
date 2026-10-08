@@ -10,15 +10,16 @@ import './styles.css';
 
 type FriendId = 'yui'|'mia'|'june';
 type Message = { id:string; role:'user'|'friend'; text?:string; image?:string; audio?:string; ts:number; seen?:boolean; reactions?:string[] };
-type TweetReply = { id:string; username:string; handle:string; text:string; likes:number; retweets:number; delaySeconds:number; type:string; avatarSeed?:string; visibleAt?:number };
+type TweetReply = { id:string; username:string; handle:string; text:string; likes:number; retweets:number; delaySeconds:number; type:string; avatarSeed?:string; visibleAt?:number; replyToHandle?:string };
 type Tweet = { id:string; text:string; image?:string; ts:number; likes:number; retweets:number; bookmarks:number; liked?:boolean; retweeted?:boolean; bookmarked?:boolean; replies:TweetReply[]; pending?:TweetReply[]; postedLanguage:string };
 
-type Friend = {id:FriendId;name:string;age:number;place:string;vibe:string;status:string;bio:string;handle:string;avatar:string;story: {caption:string;music:string;location:string;theme:string}};
+type Story = {caption:string;music:string;location:string;theme:string;imageUrl?:string;imageAlt?:string;revision?:number};
+type Friend = {id:FriendId;name:string;age:number;place:string;vibe:string;status:string;bio:string;handle:string;avatar:string;story: Story};
 
 const FRIENDS:Record<FriendId,Friend> = {
-  yui:{id:'yui',name:'Yui',age:21,place:'Tokyo / Seoul',vibe:'calm · sincere · mature · supportive',status:'in a café, probably',bio:'exchange-student big sis energy, matcha, late-night walks',handle:'@yui.note',avatar:'/avatars/yui.svg',story:{caption:'quiet table, loud thoughts',music:'NIKI · lowkey',location:'Seongsu',theme:'from-rose-100 via-white to-violet-100'}},
-  mia:{id:'mia',name:'Mia',age:21,place:'Seoul / LA',vibe:'chaotic · hilarious · loyal · fast texter',status:'emotionally online',bio:'professional instigator / snack consultant / ㅋㅋㅋ enthusiast',handle:'@miamakesnoise',avatar:'/avatars/mia.svg',story:{caption:'WHY IS IT 2AM',music:'LE SSERAFIM · CRAZY',location:'Hongdae',theme:'from-fuchsia-100 via-orange-50 to-yellow-100'}},
-  june:{id:'june',name:'June',age:22,place:'Seoul',vibe:'sweet · reliable · caring · steady',status:'just got home',bio:'good playlists, good timing, always carrying gum',handle:'@juneseoul',avatar:'/avatars/june.svg',story:{caption:'sunset walk before dinner',music:'Wave to Earth · seasons',location:'Hangang',theme:'from-sky-100 via-amber-50 to-orange-100'}}
+  yui:{id:'yui',name:'Yui',age:21,place:'Tokyo / Seoul',vibe:'calm · sincere · mature · supportive',status:'in a café, probably',bio:'exchange-student big sis energy, matcha, late-night walks',handle:'@yui.note',avatar:'/avatars/yui.svg',story:{caption:'quiet table, loud thoughts',music:'NIKI · lowkey',location:'Seongsu',theme:'from-rose-100 via-white to-violet-100',imageUrl:'https://loremflickr.com/720/1120/seoul,cafe?lock=101',imageAlt:'Seoul cafe'}},
+  mia:{id:'mia',name:'Mia',age:21,place:'Seoul / LA',vibe:'chaotic · hilarious · loyal · fast texter',status:'emotionally online',bio:'professional instigator / snack consultant / ㅋㅋㅋ enthusiast',handle:'@miamakesnoise',avatar:'/avatars/mia.svg',story:{caption:'WHY IS IT 2AM',music:'LE SSERAFIM · CRAZY',location:'Hongdae',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:'https://loremflickr.com/720/1120/hongdae,seoul,night?lock=201',imageAlt:'Hongdae at night'}},
+  june:{id:'june',name:'June',age:22,place:'Seoul',vibe:'sweet · reliable · caring · steady',status:'just got home',bio:'good playlists, good timing, always carrying gum',handle:'@juneseoul',avatar:'/avatars/june.svg',story:{caption:'sunset walk before dinner',music:'Wave to Earth · seasons',location:'Hangang',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:'https://loremflickr.com/720/1120/hangang,seoul,sunset?lock=301',imageAlt:'Hangang sunset'}}
 };
 
 const seedChats:Record<FriendId,Message[]> = {
@@ -63,7 +64,8 @@ export default function App(){
   const [theme,setTheme]=useState('soft');
   const [profile,setProfile]=useState<FriendId|null>(null);
   const [story,setStory]=useState<FriendId|null>(null);
-  const [storyData,setStoryData]=useState<Record<FriendId,Friend['story']>>(()=>load('dm-besties-stories',FRIENDS));
+  const [storyCycle,setStoryCycle]=useState<Record<FriendId,number>>(()=>load('dm-besties-story-cycle',{yui:0,mia:0,june:0}));
+  const [storyData,setStoryData]=useState<Record<FriendId,Story>>(()=>{const saved=load('dm-besties-stories',{} as Partial<Record<FriendId,Story>>);return (Object.keys(FRIENDS) as FriendId[]).reduce((acc,id)=>{acc[id]={...FRIENDS[id].story,...(saved[id]||{})};return acc;},{} as Record<FriendId,Story>)});
   const [toast,setToast]=useState<string|null>(null);
   const [call,setCall]=useState<{friend:FriendId;kind:'audio'|'video';state:'ringing'|'connected';startedAt?:number}|null>(null);
   const [tweets,setTweets]=useState<Tweet[]>(()=>load('dm-besties-tweets',initialTweets));
@@ -82,6 +84,7 @@ export default function App(){
   useEffect(()=>save('dm-besties-unread',unread),[unread]);
   useEffect(()=>save('dm-besties-sound',soundOn),[soundOn]);
   useEffect(()=>save('dm-besties-stories',storyData),[storyData]);
+  useEffect(()=>save('dm-besties-story-cycle',storyCycle),[storyCycle]);
   useEffect(()=>save('dm-besties-tweets',tweets),[tweets]);
   useEffect(()=>{fetch('/api/weather').then(r=>r.ok?r.json():null).then(x=>x?.current&&setWeather(x.current)).catch(()=>{});},[]);
 
@@ -159,8 +162,22 @@ export default function App(){
       rec.ondataavailable=e=>e.data.size&&audioChunks.current.push(e.data); rec.onstop=()=>{const blob=new Blob(audioChunks.current,{type:rec.mimeType});const reader=new FileReader();reader.onload=()=>setChats(c=>({...c,[activeFriend]:[...c[activeFriend],{id:crypto.randomUUID(),role:'user',audio:String(reader.result),ts:Date.now()}]}));reader.readAsDataURL(blob);stream.getTracks().forEach(t=>t.stop());recorderRef.current=null;showToast('Voice note sent');};rec.start();showToast('Recording… tap mic to stop');
     }catch{showToast('Microphone access is unavailable.');}
   }
-  async function generateStory(id:FriendId){
-    try{const r=await fetch('/api/generate-story',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({friendId:id})});const d=await r.json();if(!r.ok)throw new Error(d.error);setStoryData(s=>({...s,[id]:{...s[id],...d}}));showToast('Story refreshed with Seoul-time context ✨');}catch(e){showToast(e instanceof Error?e.message:'Story generation failed');}
+  async function generateStory(id:FriendId,variation?:number){
+    const next=variation??((storyCycle[id]||0)+1);
+    try{
+      const r=await fetch('/api/generate-story',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({friendId:id,variation:next})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||'Story generation failed');
+      setStoryData(s=>({...s,[id]:{...s[id],...d}}));
+    }catch(e){
+      showToast(e instanceof Error?e.message:'Story refresh failed');
+    }
+  }
+  async function openStory(id:FriendId){
+    const next=(storyCycle[id]||0)+1;
+    setStoryCycle(c=>({...c,[id]:next}));
+    setStory(id);
+    void generateStory(id,next);
   }
   async function makeCall(kind:'audio'|'video'){setCall({friend:activeFriend,kind,state:'ringing'});playPing();}
 
@@ -206,13 +223,13 @@ export default function App(){
     {tab==='dms'?<main className="dm-layout">
       <aside className="friends-panel">
         <div className="panel-head"><div><h1>Messages</h1><p>3 besties online-ish</p></div><button className="round-plus"><Plus size={18}/></button></div>
-        <div className="story-row">{(Object.keys(FRIENDS) as FriendId[]).map(id=>{const f=FRIENDS[id];return <button key={id} className="story-mini" onClick={()=>setStory(id)}><div className="story-ring"><img src={f.avatar}/></div><span>{f.name}</span></button>})}</div>
+        <div className="story-row">{(Object.keys(FRIENDS) as FriendId[]).map(id=>{const f=FRIENDS[id];return <button key={id} className="story-mini" onClick={()=>openStory(id)}><div className="story-ring"><img src={f.avatar}/></div><span>{f.name}</span></button>})}</div>
         <div className="friends-list">{(Object.keys(FRIENDS) as FriendId[]).map(id=>{const f=FRIENDS[id];const last=[...chats[id]].at(-1);return <button key={id} onClick={()=>{setActiveFriend(id);markRead(id)}} className={`friend-row ${activeFriend===id?'selected':''}`}><div className="avatar-wrap"><img src={f.avatar}/><span className="online-dot"/></div><div className="friend-copy"><div className="friend-name"><b>{f.name}</b>{unread[id]>0&&<span className="unread-dot">{unread[id]}</span>}</div><span>{last?.text||'sent a photo'}</span></div><span className="friend-time">{last?formatTime(last.ts):''}</span></button>})}</div>
       </aside>
 
       <section className={`chat-panel chat-${theme}`}>
         <div className="chat-head"><div className="chat-person"><button className="mobile-back" onClick={()=>setMobileFriendsOpen(true)}><ChevronLeft size={19}/></button><button className="avatar-button" onClick={()=>setProfile(activeFriend)}><img src={friend.avatar}/><span className="online-dot"/></button><button className="chat-title" onClick={()=>setProfile(activeFriend)}><strong>{friend.name}</strong><span>{friend.status}</span></button></div><div className="chat-actions"><button className="icon-btn" onClick={()=>makeCall('audio')}><Phone size={18}/></button><button className="icon-btn" onClick={()=>makeCall('video')}><Video size={18}/></button><button className="icon-btn" onClick={()=>setTheme(t=>t==='soft'?'lilac':t==='lilac'?'peach':'soft')}><Sun size={18}/></button></div></div>
-          <div className="story-banner" onClick={()=>setStory(activeFriend)}><div className="story-ring small"><img src={friend.avatar}/></div><div><b>{friend.name}’s story</b><span>{storyData[activeFriend]?.caption}</span></div><span className="story-chevron">›</span></div>
+          <div className="story-banner" onClick={()=>openStory(activeFriend)}><div className="story-ring small"><img src={friend.avatar}/></div><div><b>{friend.name}’s story</b><span>{storyData[activeFriend]?.caption}</span></div><span className="story-chevron">›</span></div>
           <div className="messages" ref={listRef}>
             <div className="date-pill">Today · Seoul</div>
             {chats[activeFriend].map(m=><div key={m.id} className={`message-row ${m.role==='user'?'me':''}`}>
@@ -236,7 +253,7 @@ export default function App(){
           <div className="tweet-composer"><div className="user-avatar">Y</div><div className="tweet-compose-body"><textarea value={tweetDraft} onChange={e=>setTweetDraft(e.target.value)} placeholder="What’s happening in Seoul?" maxLength={280}/>{tweetImage&&<div className="compose-image-wrap"><img src={tweetImage}/><button onClick={()=>setTweetImage(undefined)}><X size={16}/></button></div>}<div className="tweet-compose-footer"><div className="tweet-tools"><button onClick={()=>tweetFileInput.current?.click()}><ImageIcon size={18}/></button><input ref={tweetFileInput as any} type="file" accept="image/*" hidden onChange={encodeTweetImage}/><button><Smile size={18}/></button><button><MapPin size={18}/></button></div><div className="tweet-submit"><span>{tweetDraft.length}/280</span><button disabled={!tweetDraft.trim()||generatingTweet} onClick={postTweet}>{generatingTweet?'Posting…':'Post'}</button></div></div></div></div>
           <div className="feed-divider"/>
           {visibleTweets.map(t=><article className="tweet-card" key={t.id}><div className="tweet-avatar">Y</div><div className="tweet-main"><div className="tweet-line"><b>Yun</b><span>@yunseoul</span><span>·</span><span>{formatTime(t.ts)}</span><button><MoreHorizontal size={17}/></button></div><div className="tweet-text">{t.text}</div>{t.image&&<img className="tweet-image" src={t.image}/>}<div className="tweet-actions"><button onClick={()=>setReplyingTo({tweetId:t.id,replyId:''})}><Reply size={18}/><span>{t.replies.length+(t.pending?.length||0)}</span></button><button className={t.retweeted?'active-action':''} onClick={()=>updateTweet(t.id,{retweeted:!t.retweeted,retweets:t.retweets+(t.retweeted?-1:1)})}><Repeat2 size={18}/><span>{t.retweets}</span></button><button className={t.liked?'active-like':''} onClick={()=>updateTweet(t.id,{liked:!t.liked,likes:t.likes+(t.liked?-1:1)})}><Heart size={18}/><span>{t.likes}</span></button><button className={t.bookmarked?'active-bookmark':''} onClick={()=>updateTweet(t.id,{bookmarked:!t.bookmarked,bookmarks:t.bookmarks+(t.bookmarked?-1:1)})}><Bookmark size={18}/><span>{t.bookmarks}</span></button></div>
-              {t.replies.length>0&&<div className="replies">{t.replies.map(r=><div className="reply-item" key={r.id}><div className="reply-avatar" style={{background:avatarColor(r.avatarSeed||r.handle)}}>{r.username[0]?.toUpperCase()||'•'}</div><div className="reply-body"><div className="reply-head"><b>{r.username}</b><span>{r.handle}</span><span>·</span><span>{r.type}</span></div><div className="reply-text">{r.text}</div><div className="reply-tools"><button onClick={()=>setReplyingTo({tweetId:t.id,replyId:r.id})}><Reply size={14}/> reply</button><button><Heart size={14}/> {r.likes}</button><button><Repeat2 size={14}/> {r.retweets}</button></div>{replyingTo?.tweetId===t.id&&replyingTo.replyId===r.id&&<div className="reply-composer"><input autoFocus value={replyDraft} onChange={e=>setReplyDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submitReply(t.id,r.id,replyDraft)}} placeholder="Reply…"/><button onClick={()=>submitReply(t.id,r.id,replyDraft)}><ArrowUp size={17}/></button></div>}</div></div>)}</div>}
+              {t.replies.length>0&&<div className="replies">{t.replies.map(r=><div className={r.replyToHandle?'reply-item reply-branch':'reply-item'} key={r.id}><div className="reply-avatar" style={{background:avatarColor(r.avatarSeed||r.handle)}}>{r.username[0]?.toUpperCase()||'•'}</div><div className="reply-body"><div className="reply-head"><b>{r.username}</b><span>{r.handle}</span>{r.replyToHandle&&<span>↳ {r.replyToHandle}</span>}<span>·</span><span>{r.type}</span></div><div className="reply-text">{r.text}</div><div className="reply-tools"><button onClick={()=>setReplyingTo({tweetId:t.id,replyId:r.id})}><Reply size={14}/> reply</button><button><Heart size={14}/> {r.likes}</button><button><Repeat2 size={14}/> {r.retweets}</button></div>{replyingTo?.tweetId===t.id&&replyingTo.replyId===r.id&&<div className="reply-composer"><input autoFocus value={replyDraft} onChange={e=>setReplyDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submitReply(t.id,r.id,replyDraft)}} placeholder="Reply…"/><button onClick={()=>submitReply(t.id,r.id,replyDraft)}><ArrowUp size={17}/></button></div>}</div></div>)}</div>}
               {replyingTo?.tweetId===t.id&&replyingTo.replyId===''&&<div className="reply-composer root"><input autoFocus value={replyDraft} onChange={e=>setReplyDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submitReply(t.id,undefined,replyDraft)}} placeholder="Post a reply…"/><button onClick={()=>submitReply(t.id,undefined,replyDraft)}><ArrowUp size={17}/></button></div>}
             </div></article>)}
         </section>
@@ -247,7 +264,7 @@ export default function App(){
 
     {profile&&<div className="modal-backdrop" onClick={()=>setProfile(null)}><div className="profile-modal" onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setProfile(null)}><X size={18}/></button><div className="profile-cover"><div className="profile-large"><img src={FRIENDS[profile].avatar}/></div></div><div className="profile-content"><h2>{FRIENDS[profile].name}, {FRIENDS[profile].age}</h2><span className="handle">{FRIENDS[profile].handle}</span><p>{FRIENDS[profile].bio}</p><div className="tag-row">{FRIENDS[profile].vibe.split(' · ').map(t=><span key={t}>{t}</span>)}</div><div className="profile-status"><span className="online-dot static"/> {FRIENDS[profile].status}</div><button className="primary-btn" onClick={()=>{setActiveFriend(profile);setProfile(null);setTab('dms')}}>Message</button></div></div></div>}
 
-    {story&&currentStory&&<div className="modal-backdrop story-backdrop" onClick={()=>setStory(null)}><div className={`story-modal bg-gradient-to-br ${currentStory.theme}`} onClick={e=>e.stopPropagation()}><div className="story-top"><div className="story-author"><img src={FRIENDS[story].avatar}/><div><b>{FRIENDS[story].name}</b><span>now · Seoul</span></div></div><button onClick={()=>setStory(null)}><X size={19}/></button></div><div className="story-center"><div className="fake-photo"><Sparkles size={48}/><span>{STORY_BY_TIME(FRIENDS[story].name)[0]}</span></div></div><div className="story-bottom"><b>{currentStory.caption}</b><span><Music2 size={14}/> {currentStory.music}</span><span><MapPin size={14}/> {currentStory.location}</span><button onClick={()=>generateStory(story)}><Sparkles size={14}/> AI refresh</button></div></div></div>}
+    {story&&currentStory&&<div className="modal-backdrop story-backdrop" onClick={()=>setStory(null)}><div className={`story-modal bg-gradient-to-br ${currentStory.theme}`} onClick={e=>e.stopPropagation()}><div className="story-top"><div className="story-author"><img src={FRIENDS[story].avatar}/><div><b>{FRIENDS[story].name}</b><span>now · Seoul</span></div></div><button onClick={()=>setStory(null)}><X size={19}/></button></div><div className="story-center"><div className="fake-photo">{currentStory.imageUrl&&<img className="story-photo" src={currentStory.imageUrl} alt={currentStory.imageAlt||'Story photo'} onError={e=>{e.currentTarget.style.display='none';}}/>}<div className="story-photo-overlay"><Sparkles size={30}/><span>{STORY_BY_TIME(FRIENDS[story].name)[0]}</span></div></div></div><div className="story-bottom"><b>{currentStory.caption}</b><span><Music2 size={14}/> {currentStory.music}</span><span><MapPin size={14}/> {currentStory.location}</span><button onClick={()=>{const next=(storyCycle[story]||0)+1;setStoryCycle(c=>({...c,[story]:next}));void generateStory(story,next)}}><Sparkles size={14}/> New story</button></div></div></div>}
 
     {call&&<div className="call-overlay"><div className="call-card"><img className="call-avatar" src={FRIENDS[call.friend].avatar}/><div className="call-name">{FRIENDS[call.friend].name}</div><div className="call-status">{call.state==='ringing'?`calling ${call.kind}…`:formatTime(call.startedAt||Date.now())}</div>{call.state==='ringing'?<div className="call-pulse"><span/><span/><span/></div>:<div className="call-timer"><Clock3 size={17}/> {Math.max(0,Math.floor((Date.now()-(call.startedAt||Date.now()))/1000))}s</div>}<div className="call-controls"><button onClick={()=>setCall(null)} className="hangup"><Phone size={20}/></button><button onClick={()=>makeCall(call.kind==='audio'?'video':'audio')}>{call.kind==='audio'?<Video size={20}/>:<AudioLines size={20}/>}</button></div></div></div>}
 
