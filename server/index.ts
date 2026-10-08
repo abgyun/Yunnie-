@@ -56,6 +56,7 @@ async function callGemini<T>(prompt:string,schema:any,maxMs=25000):Promise<T>{
 const chatSchema={type:Type.OBJECT,properties:{messages:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{text:{type:Type.STRING}},required:['text']},minItems:1,maxItems:3}},required:['messages']};
 const tweetBatchSchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{username:{type:Type.STRING},handle:{type:Type.STRING},text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER},type:{type:Type.STRING},replyToHandle:{type:Type.STRING}},required:['username','handle','text','likes','retweets','type','replyToHandle']},minItems:8,maxItems:8}},required:['replies']};
 const replySchema={type:Type.OBJECT,properties:{replies:{type:Type.ARRAY,items:{type:Type.OBJECT,properties:{text:{type:Type.STRING},likes:{type:Type.INTEGER},retweets:{type:Type.INTEGER}},required:['text','likes','retweets']},minItems:1,maxItems:3}},required:['replies']};
+const imageAnalysisSchema={type:Type.OBJECT,properties:{description:{type:Type.STRING},setting:{type:Type.STRING},people:{type:Type.STRING},objects:{type:Type.STRING},textInImage:{type:Type.STRING},mood:{type:Type.STRING}},required:['description','setting','people','objects','textInImage','mood']};
 const storySchema={type:Type.OBJECT,properties:{caption:{type:Type.STRING},music:{type:Type.STRING},location:{type:Type.STRING},comments:{type:Type.ARRAY,items:{type:Type.STRING},minItems:2,maxItems:4}},required:['caption','music','location','comments']};
 
 app.get('/api/health',(_req,res)=>res.json({ok:true,geminiConfigured:Boolean(ai),time:new Date().toISOString()}));
@@ -80,11 +81,35 @@ ${messages.slice(-16).map((m:any)=>`${m.role==='user'?'Yun':f.name}: ${m.text}`)
   }catch(e){res.status(502).json({error:e instanceof Error?e.message:'Chat generation failed.'});}
 });
 
-app.post('/api/tweet-replies',async(req,res)=>{
-  const {tweet='',language='English',context=''}=req.body??{};
-  if(!tweet.trim())return res.status(400).json({error:'Tweet is empty.'});
+async function analyzeTweetImage(imageData:string):Promise<any|null>{
+  if(!ai||!imageData)return null;
+  const match=imageData.match(/^data:([^;]+);base64,(.+)$/s);
+  if(!match)return null;
   try{
-    const basePrompt='Generate believable internet replies to this exact X/Twitter post by Yun, an exchange student in Seoul.\nPOST: "'+tweet+'"\nLANGUAGE: '+language+'\nCONTEXT: '+context+'\nReact to the exact post. Never invent a different topic. Mix genuine answers, disagreement, criticism, annoyed reactions, jokes, nitpicks, quote-tweet energy, and real back-and-forth arguments. For Japanese posts use natural X/2ch-adjacent Japanese; for English use current internet/Gen-Z language; for Korean use natural Korean internet speech. This batch must contain exactly 8 different users. 2-4 of them should be part of a believable argument or レスバ. Reply-to handles must reference users from this same batch. Keep every reply under 35 words. Do not make every reply supportive.';
+    const mimeType=match[1];
+    const data=match[2];
+    const prompt='Analyze this user-posted image for an X/Twitter thread. Describe only what is visibly present. Note setting, people, objects, visible text, and overall mood. Be concrete enough that replies can reference the actual image. Do not invent details.';
+    const response=await Promise.race([
+      ai.models.generateContent({
+        model:FAST_MODEL,
+        contents:[{inlineData:{mimeType,data}},{text:prompt}],
+        config:{responseMimeType:'application/json',responseSchema:imageAnalysisSchema}
+      }),
+      new Promise<never>((_,rej)=>setTimeout(()=>rej(new Error('Image analysis timed out')),25000))
+    ]);
+    const raw=extractText(response);
+    return raw?JSON.parse(raw):null;
+  }catch(e){
+    console.error('Tweet image analysis failed:',e instanceof Error?e.message:e);
+    return null;
+  }
+}
+
+app.post('/api/tweet-replies',async(req,res)=>{
+  const {tweet='',language='English',imageData='',context=''}=req.body??{};
+  if(!tweet.trim()&&!imageData)return res.status(400).json({error:'Tweet or image is required.'});
+  try{
+    const basePrompt='Generate believable internet replies to this exact X/Twitter post by Yun, an exchange student in Seoul.\nPOST: "'+tweet+'"\nLANGUAGE: '+language+'\nCONTEXT: '+context+'\nReact to the exact post and, when an IMAGE ANALYSIS block is present, react to visible details from the actual photo. Never invent a different topic or visual detail. Mix genuine answers, disagreement, criticism, annoyed reactions, jokes, nitpicks, quote-tweet energy, and real back-and-forth arguments. For Japanese posts use natural X/2ch-adjacent Japanese; for English use current internet/Gen-Z language; for Korean use natural Korean internet speech. This batch must contain exactly 8 different users. 2-4 of them should be part of a believable argument or レスバ. Reply-to handles must reference users from this same batch. Keep every reply under 35 words. Do not make every reply supportive.';
     const batches=await Promise.all(Array.from({length:4},(_,i)=>callGemini<any>(basePrompt+'\nBATCH '+(i+1)+'/4: create 8 unique users with a different mix of reactions.',tweetBatchSchema,30000)));
     const replies=batches.flatMap((b:any)=>Array.isArray(b.replies)?b.replies:[]).slice(0,32).map((r:any,i:number)=>({...r,id:crypto.randomUUID(),delaySeconds:0,avatarSeed:(r.handle||'user')+'-'+i,replyToHandle:r.replyToHandle||''}));
     if(replies.length<30)throw new Error('Only generated '+replies.length+' replies.');
