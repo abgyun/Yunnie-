@@ -223,16 +223,36 @@ export default function App(){
   }
   async function makeCall(kind:'audio'|'video'){setCall({friend:activeFriend,kind,state:'ringing'});playPing();}
 
-  function encodeTweetImage(e:ChangeEvent<HTMLInputElement>){const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>setTweetImage(String(r.result));r.readAsDataURL(f);e.target.value='';}
+  async function encodeTweetImage(e:ChangeEvent<HTMLInputElement>){
+    const f=e.target.files?.[0]; if(!f)return;
+    try{
+      const bitmap=await createImageBitmap(f);
+      const max=1280;
+      const scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+      canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+      const ctx=canvas.getContext('2d');
+      if(!ctx)throw new Error('Could not prepare image.');
+      ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+      bitmap.close();
+      setTweetImage(canvas.toDataURL('image/jpeg',0.82));
+      showToast('Photo attached — Gemini will analyze it when you post.');
+    }catch{
+      const r=new FileReader();
+      r.onload=()=>setTweetImage(String(r.result));
+      r.readAsDataURL(f);
+    }finally{e.target.value='';}
+  }
   async function postTweet(){
-    const text=tweetDraft.trim(); if(!text||generatingTweet)return;
+    const text=tweetDraft.trim(); if((!text&&!tweetImage)||generatingTweet)return;
     setGeneratingTweet(true);
     try{
-      const lang=languageOf(text); const r=await fetch('/api/tweet-replies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tweet:text,language:lang,context:`Yun is an exchange student in Seoul. Current weather: ${weather.temperature_2m??'unknown'}°C, ${weatherLabel(weather.weather_code)}.`})});
+      const lang=languageOf(text); const r=await fetch('/api/tweet-replies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tweet:text,language:lang,imageData:tweetImage||'',context:`Yun is an exchange student in Seoul. Current weather: ${weather.temperature_2m??'unknown'}°C, ${weatherLabel(weather.weather_code)}.`})});
       const d=await r.json(); if(!r.ok)throw new Error(d.error||'Could not generate replies');
       const now=Date.now(); const replies=(d.replies||[]).map((x:TweetReply)=>({...x,delaySeconds:0,visibleAt:now}));
       const tweet:Tweet={id:crypto.randomUUID(),text,image:tweetImage,ts:now,likes:0,retweets:0,bookmarks:0,postedLanguage:lang,replies,pending:[]};
-      setTweets(t=>[tweet,...t]);setTweetDraft('');setTweetImage(undefined);showToast('Posted. Replies are coming in over the next 75 seconds.');
+      setTweets(t=>[tweet,...t]);setTweetDraft('');setTweetImage(undefined);showToast('Posted. 32 people replied instantly.');
     }catch(e){showToast(e instanceof Error?e.message:'Could not generate replies');}
     finally{setGeneratingTweet(false);}
   }
@@ -291,7 +311,7 @@ export default function App(){
       </main>:<main className="feed-shell">
         <section className="feed-column">
           <div className="feed-head"><div><h1>For you</h1><span>Seoul side of the internet</span></div><button className="icon-btn"><MoreHorizontal size={19}/></button></div>
-          <div className="tweet-composer"><div className="user-avatar">Y</div><div className="tweet-compose-body"><textarea value={tweetDraft} onChange={e=>setTweetDraft(e.target.value)} placeholder="What’s happening in Seoul?" maxLength={280}/>{tweetImage&&<div className="compose-image-wrap"><img src={tweetImage}/><button onClick={()=>setTweetImage(undefined)}><X size={16}/></button></div>}<div className="tweet-compose-footer"><div className="tweet-tools"><button onClick={()=>tweetFileInput.current?.click()}><ImageIcon size={18}/></button><input ref={tweetFileInput as any} type="file" accept="image/*" hidden onChange={encodeTweetImage}/><button><Smile size={18}/></button><button><MapPin size={18}/></button></div><div className="tweet-submit"><span>{tweetDraft.length}/280</span><button disabled={!tweetDraft.trim()||generatingTweet} onClick={postTweet}>{generatingTweet?'Posting…':'Post'}</button></div></div></div></div>
+          <div className="tweet-composer"><div className="user-avatar">Y</div><div className="tweet-compose-body"><textarea value={tweetDraft} onChange={e=>setTweetDraft(e.target.value)} placeholder="What’s happening in Seoul?" maxLength={280}/>{tweetImage&&<div className="compose-image-wrap"><img src={tweetImage}/><button onClick={()=>setTweetImage(undefined)}><X size={16}/></button></div>}<div className="tweet-compose-footer"><div className="tweet-tools"><button onClick={()=>tweetFileInput.current?.click()}><ImageIcon size={18}/></button><input ref={tweetFileInput as any} type="file" accept="image/*" hidden onChange={encodeTweetImage}/><button><Smile size={18}/></button><button><MapPin size={18}/></button></div><div className="tweet-submit"><span>{tweetDraft.length}/280</span><button disabled={(!tweetDraft.trim()&&!tweetImage)||generatingTweet} onClick={postTweet}>{generatingTweet?'Posting…':'Post'}</button></div></div></div></div>
           <div className="feed-divider"/>
           {visibleTweets.map(t=><article className="tweet-card" key={t.id}><div className="tweet-avatar">Y</div><div className="tweet-main"><div className="tweet-line"><b>Yun</b><span>@yunseoul</span><span>·</span><span>{formatTime(t.ts)}</span><button><MoreHorizontal size={17}/></button></div><div className="tweet-text">{t.text}</div>{t.image&&<img className="tweet-image" src={t.image}/>}<div className="tweet-actions"><button onClick={()=>setReplyingTo({tweetId:t.id,replyId:''})}><Reply size={18}/><span>{t.replies.length+(t.pending?.length||0)}</span></button><button className={t.retweeted?'active-action':''} onClick={()=>updateTweet(t.id,{retweeted:!t.retweeted,retweets:t.retweets+(t.retweeted?-1:1)})}><Repeat2 size={18}/><span>{t.retweets}</span></button><button className={t.liked?'active-like':''} onClick={()=>updateTweet(t.id,{liked:!t.liked,likes:t.likes+(t.liked?-1:1)})}><Heart size={18}/><span>{t.likes}</span></button><button className={t.bookmarked?'active-bookmark':''} onClick={()=>updateTweet(t.id,{bookmarked:!t.bookmarked,bookmarks:t.bookmarks+(t.bookmarked?-1:1)})}><Bookmark size={18}/><span>{t.bookmarks}</span></button></div>
               {t.replies.length>0&&<div className="replies">{t.replies.map(r=><div className={r.replyToHandle?'reply-item reply-branch':'reply-item'} key={r.id}><div className="reply-avatar" style={{background:avatarColor(r.avatarSeed||r.handle)}}>{r.username[0]?.toUpperCase()||'•'}</div><div className="reply-body"><div className="reply-head"><b>{r.username}</b><span>{r.handle}</span>{r.replyToHandle&&<span>↳ {r.replyToHandle}</span>}<span>·</span><span>{r.type}</span></div><div className="reply-text">{r.text}</div><div className="reply-tools"><button onClick={()=>setReplyingTo({tweetId:t.id,replyId:r.id})}><Reply size={14}/> reply</button><button><Heart size={14}/> {r.likes}</button><button><Repeat2 size={14}/> {r.retweets}</button></div>{replyingTo?.tweetId===t.id&&replyingTo.replyId===r.id&&<div className="reply-composer"><input autoFocus value={replyDraft} onChange={e=>setReplyDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submitReply(t.id,r.id,replyDraft)}} placeholder="Reply…"/><button onClick={()=>submitReply(t.id,r.id,replyDraft)}><ArrowUp size={17}/></button></div>}</div></div>)}</div>}
