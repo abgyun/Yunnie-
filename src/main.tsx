@@ -75,8 +75,6 @@ const FRONTEND_STORY_VARIANTS:Record<FriendId,Story[]> = {
   ]
 };
 
-};
-
 const initialTweets:Tweet[] = [
   {id:'t1',text:'Seoul weather really cannot decide if it wants to be cozy or dramatic',ts:Date.now()-1000*60*48,likes:31,retweets:4,bookmarks:2,postedLanguage:'English',replies:[
     {id:'r1',username:'seoulsidewalk',handle:'@seoulsidewalk',text:'the wind is literally doing character development rn',likes:14,retweets:2,delaySeconds:0,type:'roaster'},
