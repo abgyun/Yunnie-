@@ -13,7 +13,7 @@ type Message = { id:string; role:'user'|'friend'; text?:string; image?:string; a
 type TweetReply = { id:string; username:string; handle:string; text:string; likes:number; retweets:number; delaySeconds:number; type:string; avatarSeed?:string; visibleAt?:number; replyToHandle?:string };
 type Tweet = { id:string; text:string; image?:string; ts:number; likes:number; retweets:number; bookmarks:number; liked?:boolean; retweeted?:boolean; bookmarked?:boolean; replies:TweetReply[]; pending?:TweetReply[]; postedLanguage:string };
 
-type Story = {caption:string;music:string;location:string;theme:string;imageUrl?:string;imageAlt?:string;revision?:number};
+type Story = {caption:string;music:string;location:string;theme:string;imageUrl?:string;imageAlt?:string;revision?:number;comments?:string[]};
 type Friend = {id:FriendId;name:string;age:number;place:string;vibe:string;status:string;bio:string;handle:string;avatar:string;story: Story};
 
 const FRIENDS:Record<FriendId,Friend> = {
@@ -36,24 +36,42 @@ const STORY_BY_TIME = (name:string) => {
   return name==='Mia'?['WHY ARE WE STILL AWAKE','DAY6 · Happy','Euljiro']:[name==='Yui'?'late tea, no rush':'home safe','HONNE · no song without you','Yeonnam'];
 };
 
+function storyPhoto(scene:'cafe'|'city'|'fashion'|'river',seed:number){
+  const palettes:{[key:string]:string[]}={
+    cafe:['#f9e7d0','#8b5e4a','#f6f0e8'],
+    city:['#17152f','#f06aa7','#6b7cff'],
+    fashion:['#efe1d0','#24202b','#d98aa5'],
+    river:['#f7b56b','#6b8fdc','#172d58']
+  };
+  const [sky,accent,shadow]=palettes[scene];
+  const safe=(seed%997)+1;
+  let extras='';
+  if(scene==='cafe') extras='<rect x="110" y="660" width="580" height="270" rx="34" fill="'+shadow+'"/><circle cx="400" cy="720" r="90" fill="'+accent+'"/><rect x="335" y="770" width="130" height="120" rx="28" fill="'+accent+'"/>';
+  if(scene==='city') extras='<rect x="80" y="520" width="170" height="450" fill="'+shadow+'"/><rect x="270" y="430" width="220" height="540" fill="#292648"/><rect x="515" y="350" width="180" height="620" fill="'+shadow+'"/>';
+  if(scene==='fashion') extras='<rect x="120" y="120" width="560" height="840" rx="30" fill="#ffffff28" stroke="#ffffff70" stroke-width="8"/><circle cx="400" cy="360" r="72" fill="#d7a27f"/><path d="M315 450 Q400 400 485 450 L540 760 Q400 825 260 760 Z" fill="'+accent+'"/>';
+  if(scene==='river') extras='<path d="M0 520 Q180 420 360 520 T800 500 V1200 H0Z" fill="'+accent+'"/><path d="M0 760 Q200 690 400 780 T800 760 V1200 H0Z" fill="'+shadow+'"/><path d="M120 610 Q400 540 680 620" stroke="#ffffffaa" stroke-width="12" fill="none"/>';
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="'+sky+'"/><stop offset=".62" stop-color="'+accent+'"/><stop offset="1" stop-color="'+shadow+'"/></linearGradient><filter id="grain"><feTurbulence baseFrequency=".8" numOctaves="2" seed="'+safe+'" type="fractalNoise"/><feComponentTransfer><feFuncA type="table" tableValues="0 .09"/></feComponentTransfer></filter></defs><rect width="800" height="1200" fill="url(#g)"/><circle cx="650" cy="190" r="170" fill="#ffffff22"/>'+extras+'<rect width="800" height="1200" filter="url(#grain)" opacity=".45"/></svg>';
+  return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);
+}
+
 const FRONTEND_STORY_VARIANTS:Record<FriendId,Story[]> = {
   yui:[
-    {caption:'tiny café, huge main-character energy',music:'NIKI · lowkey',location:'Seongsu',theme:'from-rose-100 via-white to-violet-100',imageUrl:'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=720&q=85',imageAlt:'coffee shop'},
-    {caption:'studying here was a very good decision',music:'Laufey · From The Start',location:'Yeonnam',theme:'from-rose-100 via-white to-violet-100',imageUrl:'https://images.unsplash.com/photo-1445116572660-236099ec97a0?auto=format&fit=crop&w=720&q=85',imageAlt:'cozy cafe table'},
-    {caption:'the kind of evening I needed',music:'Wave to Earth · seasons',location:'Euljiro',theme:'from-rose-100 via-white to-violet-100',imageUrl:'https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=720&q=85',imageAlt:'city evening'},
-    {caption:'one more tea before heading home',music:'HONNE · no song without you',location:'Hannam',theme:'from-rose-100 via-white to-violet-100',imageUrl:'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=720&q=85',imageAlt:'tea and cafe'}
+    {caption:'tiny café, huge main-character energy',music:'NIKI · lowkey',location:'Seongsu',theme:'from-rose-100 via-white to-violet-100',imageUrl:storyPhoto('cafe',1),imageAlt:'generated café photo',comments:["this place is very Yui","need this café saved immediately"]},
+    {caption:'studying here was a very good decision',music:'Laufey · From The Start',location:'Yeonnam',theme:'from-rose-100 via-white to-violet-100',imageUrl:storyPhoto('cafe',2),imageAlt:'generated café table photo',comments:["okay this looks so peaceful","the lighting???"]},
+    {caption:'the kind of evening I needed',music:'Wave to Earth · seasons',location:'Euljiro',theme:'from-rose-100 via-white to-violet-100',imageUrl:storyPhoto('city',3),imageAlt:'generated Seoul evening photo',comments:["this is such a Seoul evening","you always find the prettiest spots"]},
+    {caption:'one more tea before heading home',music:'HONNE · no song without you',location:'Hannam',theme:'from-rose-100 via-white to-violet-100',imageUrl:storyPhoto('cafe',4),imageAlt:'generated tea photo',comments:["one more tea is valid","text me when you are home"]}
   ],
   mia:[
-    {caption:'this city is SO unserious',music:'LE SSERAFIM · CRAZY',location:'Hongdae',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:'https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=720&q=85',imageAlt:'Seoul-style city street'},
-    {caption:'I left the house for this btw',music:'aespa · Drama',location:'Hannam',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=720&q=85',imageAlt:'fashion outfit'},
-    {caption:'the fit deserved a photo',music:'NewJeans · Super Shy',location:'Seongsu',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=720&q=85',imageAlt:'street fashion'},
-    {caption:'why did we end up here again',music:'DAY6 · Happy',location:'Euljiro',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:'https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=720&q=85',imageAlt:'night city'}
+    {caption:'this city is SO unserious',music:'LE SSERAFIM · CRAZY',location:'Hongdae',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:storyPhoto('city',5),imageAlt:'generated night city photo',comments:["HELP why is this actually iconic","girl where are you"]},
+    {caption:'I left the house for this btw',music:'aespa · Drama',location:'Hannam',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:storyPhoto('fashion',6),imageAlt:'generated fashion photo',comments:["the fit ate","post the full fit RIGHT NOW"]},
+    {caption:'the fit deserved a photo',music:'NewJeans · Super Shy',location:'Seongsu',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:storyPhoto('fashion',7),imageAlt:'generated street fashion photo',comments:["okayyy I see you","this outfit is doing numbers"]},
+    {caption:'why did we end up here again',music:'DAY6 · Happy',location:'Euljiro',theme:'from-fuchsia-100 via-orange-50 to-yellow-100',imageUrl:storyPhoto('city',8),imageAlt:'generated city lights photo',comments:["why does this look like a music video","you cannot keep finding places like this"]}
   ],
   june:[
-    {caption:'walked until the air felt better',music:'Wave to Earth · seasons',location:'Hangang',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=720&q=85',imageAlt:'sunset walk'},
-    {caption:'quiet view before dinner',music:'Laufey · From The Start',location:'Seoul Forest',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:'https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=720&q=85',imageAlt:'quiet park'},
-    {caption:'found a good spot to reset',music:'HONNE · warm on a cold night',location:'Nodeul',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=720&q=85',imageAlt:'river view'},
-    {caption:'home a little later than planned',music:'DAY6 · You Were Beautiful',location:'Itaewon',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:'https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=720&q=85',imageAlt:'city lights'}
+    {caption:'walked until the air felt better',music:'Wave to Earth · seasons',location:'Hangang',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:storyPhoto('river',9),imageAlt:'generated river sunset photo',comments:["that view is insane","perfect walk weather"]},
+    {caption:'quiet view before dinner',music:'Laufey · From The Start',location:'Seoul Forest',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:storyPhoto('river',10),imageAlt:'generated park photo',comments:["this is actually so nice","glad you got some fresh air"]},
+    {caption:'found a good spot to reset',music:'HONNE · warm on a cold night',location:'Nodeul',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:storyPhoto('river',11),imageAlt:'generated river photo',comments:["okay this is peaceful","save this spot"]},
+    {caption:'home a little later than planned',music:'DAY6 · You Were Beautiful',location:'Itaewon',theme:'from-sky-100 via-amber-50 to-orange-100',imageUrl:storyPhoto('city',12),imageAlt:'generated city lights photo',comments:["get home safe","that view was worth the walk"]}
   ]
 };
 
@@ -91,7 +109,7 @@ export default function App(){
   const [storyData,setStoryData]=useState<Record<FriendId,Story>>(()=>{const saved=load('dm-besties-stories',{} as Partial<Record<FriendId,Story>>);return (Object.keys(FRIENDS) as FriendId[]).reduce((acc,id)=>{acc[id]={...FRIENDS[id].story,...(saved[id]||{})};return acc;},{} as Record<FriendId,Story>)});
   const [toast,setToast]=useState<string|null>(null);
   const [call,setCall]=useState<{friend:FriendId;kind:'audio'|'video';state:'ringing'|'connected';startedAt?:number}|null>(null);
-  const [tweets,setTweets]=useState<Tweet[]>(()=>load('dm-besties-tweets',initialTweets));
+  const [tweets,setTweets]=useState<Tweet[]>(()=>load('dm-besties-tweets-v3',initialTweets));
   const [tweetDraft,setTweetDraft]=useState('');
   const [tweetImage,setTweetImage]=useState<string|undefined>();
   const [generatingTweet,setGeneratingTweet]=useState(false);
@@ -108,7 +126,7 @@ export default function App(){
   useEffect(()=>save('dm-besties-sound',soundOn),[soundOn]);
   useEffect(()=>save('dm-besties-stories',storyData),[storyData]);
   useEffect(()=>save('dm-besties-story-cycle',storyCycle),[storyCycle]);
-  useEffect(()=>save('dm-besties-tweets',tweets),[tweets]);
+  useEffect(()=>save('dm-besties-tweets-v3',tweets),[tweets]);
   useEffect(()=>{fetch('/api/weather').then(r=>r.ok?r.json():null).then(x=>x?.current&&setWeather(x.current)).catch(()=>{});},[]);
 
   useEffect(()=>{ if(tab==='dms') requestAnimationFrame(()=>listRef.current?.scrollTo({top:listRef.current.scrollHeight,behavior:'smooth'})); },[chats,activeFriend,typing,tab]);
@@ -192,7 +210,7 @@ export default function App(){
       const d=await r.json();
       if(!r.ok)throw new Error(d.error||'Story generation failed');
       const local=FRONTEND_STORY_VARIANTS[id][next%FRONTEND_STORY_VARIANTS[id].length];
-      setStoryData(s=>({...s,[id]:{...s[id],...local,...d,imageUrl:local.imageUrl,imageAlt:local.imageAlt,revision:next}}));
+      setStoryData(s=>({...s,[id]:{...s[id],...local,...d,imageUrl:local.imageUrl,imageAlt:local.imageAlt,comments:d.comments?.length?d.comments:local.comments,revision:next}}));
     }catch(e){
       showToast(e instanceof Error?e.message:'Story refresh failed');
     }
@@ -214,9 +232,8 @@ export default function App(){
     try{
       const lang=languageOf(text); const r=await fetch('/api/tweet-replies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tweet:text,language:lang,context:`Yun is an exchange student in Seoul. Current weather: ${weather.temperature_2m??'unknown'}°C, ${weatherLabel(weather.weather_code)}.`})});
       const d=await r.json(); if(!r.ok)throw new Error(d.error||'Could not generate replies');
-      const now=Date.now(); const replies=(d.replies||[]).map((x:TweetReply)=>({...x,visibleAt:now+x.delaySeconds*1000}));
-      const immediate=replies.filter((x:TweetReply)=>x.delaySeconds<=2); const pending=replies.filter((x:TweetReply)=>x.delaySeconds>2);
-      const tweet:Tweet={id:crypto.randomUUID(),text,image:tweetImage,ts:now,likes:0,retweets:0,bookmarks:0,postedLanguage:lang,replies:immediate,pending};
+      const now=Date.now(); const replies=(d.replies||[]).map((x:TweetReply)=>({...x,delaySeconds:0,visibleAt:now}));
+      const tweet:Tweet={id:crypto.randomUUID(),text,image:tweetImage,ts:now,likes:0,retweets:0,bookmarks:0,postedLanguage:lang,replies,pending:[]};
       setTweets(t=>[tweet,...t]);setTweetDraft('');setTweetImage(undefined);showToast('Posted. Replies are coming in over the next 75 seconds.');
     }catch(e){showToast(e instanceof Error?e.message:'Could not generate replies');}
     finally{setGeneratingTweet(false);}
@@ -290,7 +307,7 @@ export default function App(){
 
     {profile&&<div className="modal-backdrop" onClick={()=>setProfile(null)}><div className="profile-modal" onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setProfile(null)}><X size={18}/></button><div className="profile-cover"><div className="profile-large"><img src={FRIENDS[profile].avatar}/></div></div><div className="profile-content"><h2>{FRIENDS[profile].name}, {FRIENDS[profile].age}</h2><span className="handle">{FRIENDS[profile].handle}</span><p>{FRIENDS[profile].bio}</p><div className="tag-row">{FRIENDS[profile].vibe.split(' · ').map(t=><span key={t}>{t}</span>)}</div><div className="profile-status"><span className="online-dot static"/> {FRIENDS[profile].status}</div><button className="primary-btn" onClick={()=>{setActiveFriend(profile);setProfile(null);setTab('dms')}}>Message</button></div></div></div>}
 
-    {story&&currentStory&&<div className="modal-backdrop story-backdrop" onClick={()=>setStory(null)}><div className={`story-modal bg-gradient-to-br ${currentStory.theme}`} onClick={e=>e.stopPropagation()}><div className="story-top"><div className="story-author"><img src={FRIENDS[story].avatar}/><div><b>{FRIENDS[story].name}</b><span>now · Seoul</span></div></div><button onClick={()=>setStory(null)}><X size={19}/></button></div><div className="story-center"><div className="fake-photo">{currentStory.imageUrl&&<img className="story-photo" src={currentStory.imageUrl} alt={currentStory.imageAlt||'Story photo'} onError={e=>{const img=e.currentTarget; img.src=FRONTEND_STORY_VARIANTS[story!][((currentStory.revision||0)+1)%FRONTEND_STORY_VARIANTS[story!].length].imageUrl!;}}/>}<div className="story-photo-overlay"><Sparkles size={30}/><span>{STORY_BY_TIME(FRIENDS[story].name)[0]}</span></div></div></div><div className="story-bottom"><b>{currentStory.caption}</b><span><Music2 size={14}/> {currentStory.music}</span><span><MapPin size={14}/> {currentStory.location}</span><button onClick={()=>{const next=(storyCycle[story]||0)+1;setStoryCycle(c=>({...c,[story]:next}));void generateStory(story,next)}}><Sparkles size={14}/> New story</button></div></div></div>}
+    {story&&currentStory&&<div className="modal-backdrop story-backdrop" onClick={()=>setStory(null)}><div className={`story-modal bg-gradient-to-br ${currentStory.theme}`} onClick={e=>e.stopPropagation()}><div className="story-top"><div className="story-author"><img src={FRIENDS[story].avatar}/><div><b>{FRIENDS[story].name}</b><span>now · Seoul</span></div></div><button onClick={()=>setStory(null)}><X size={19}/></button></div><div className="story-center"><div className="fake-photo">{currentStory.imageUrl&&<img className="story-photo" src={currentStory.imageUrl} alt={currentStory.imageAlt||'Story photo'} onError={e=>{const img=e.currentTarget; img.src=FRONTEND_STORY_VARIANTS[story!][((currentStory.revision||0)+1)%FRONTEND_STORY_VARIANTS[story!].length].imageUrl!;}}/>}<div className="story-photo-overlay"><Sparkles size={30}/><span>{STORY_BY_TIME(FRIENDS[story].name)[0]}</span></div></div></div><div className="story-bottom"><b>{currentStory.caption}</b><span><Music2 size={14}/> {currentStory.music}</span><span><MapPin size={14}/> {currentStory.location}</span>{currentStory.comments?.length&&<div className="story-comments"><b>Replies</b>{currentStory.comments.map((c,i)=><span key={i}>♡ {c}</span>)}</div>}<button onClick={()=>{const next=(storyCycle[story]||0)+1;setStoryCycle(c=>({...c,[story]:next}));void generateStory(story,next)}}><Sparkles size={14}/> New story</button></div></div></div>}
 
     {call&&<div className="call-overlay"><div className="call-card"><img className="call-avatar" src={FRIENDS[call.friend].avatar}/><div className="call-name">{FRIENDS[call.friend].name}</div><div className="call-status">{call.state==='ringing'?`calling ${call.kind}…`:formatTime(call.startedAt||Date.now())}</div>{call.state==='ringing'?<div className="call-pulse"><span/><span/><span/></div>:<div className="call-timer"><Clock3 size={17}/> {Math.max(0,Math.floor((Date.now()-(call.startedAt||Date.now()))/1000))}s</div>}<div className="call-controls"><button onClick={()=>setCall(null)} className="hangup"><Phone size={20}/></button><button onClick={()=>makeCall(call.kind==='audio'?'video':'audio')}>{call.kind==='audio'?<Video size={20}/>:<AudioLines size={20}/>}</button></div></div></div>}
 
